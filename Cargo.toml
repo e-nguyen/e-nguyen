@@ -6,7 +6,6 @@ keywords = ["vulkan", "3D", "graphics", "audio", "math"]
 categories = ["graphics", "multimedia", "visualization"]
 authors = ["E-Nguyen Developers", "Knapp <knappador@gmail.com>"]
 license = "LGPL-3.0-only"
-license-file = "./LICENSE"
 repository = "https://github.com/e-nguyen/e-nguyen"
 edition = "2018"
 maintenance = { status = "actively-developed" }
