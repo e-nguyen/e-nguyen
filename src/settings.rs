@@ -149,7 +149,7 @@ pub struct SettingsFramer<'f> {
     vertex_buffer: Arc<CpuAccessibleBuffer<[XyUvVertex]>>,
     background_rect: Arc<CpuAccessibleBuffer<[XyVertex]>>,
     set: Arc<dyn DescriptorSet + Send + Sync>,
-    title: Section,
+    title: Vec<Section>,
     glyph_brush: GlyphBrush<'f>,
 }
 
@@ -312,16 +312,16 @@ impl<'f, 'r: 'f> Framer<'f, 'r, SettingsFramer<'f>, SettingsState, SettingsResou
                 .ok_or("Subpass is None")?;
         let mut glyph_brush = GlyphBrush::new(&swap_win.device, subpass.clone()).unwrap();
 
-        let title = glyph_brush.queue_glyphs(
-            resources.font.layout("E-NGUYEN", Scale::uniform(72.0), point(56.0, 256.0)),
-            0,
-            [1.0, 1.0, 1.0, 1.0],
-        );
+        let title = vec![
+            (glyph_brush.queue_glyphs(
+                resources.font.layout("E-NGUYEN", Scale::uniform(72.0), point(56.0, 256.0)),
+                0,
+                [1.0, 1.0, 1.0, 1.0],
+            )),
+        ];
 
-        let copy_future = glyph_brush
-            .cache_sections(&swap_win.window_queue, vec![&title].iter().cloned())
-            .unwrap()
-            .unwrap();
+        let copy_future =
+            glyph_brush.cache_sections(&swap_win.window_queue, title.iter()).unwrap().unwrap();
 
         let texture_future: Box<dyn GpuFuture> = Box::new(texture_future.join(copy_future));
 
