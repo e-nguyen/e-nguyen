@@ -9,6 +9,7 @@ license = "LGPL-3.0-only"
 license-file = "./LICENSE"
 repository = "https://github.com/e-nguyen/e-nguyen"
 edition = "2018"
+maintenance = { status = "actively-developed" }
 
 [dependencies]
 image = "0.21.0"
