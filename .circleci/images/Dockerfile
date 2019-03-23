@@ -1,3 +1,5 @@
+# Licensed CC-0-1.0 in the Catalog
+
 FROM archlinux/base
 
 RUN pacman -Syuq --noconfirm git base-devel sudo
