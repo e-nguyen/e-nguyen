@@ -24,7 +24,6 @@ A copy of the license's text must be in this folder prior to using a license.
 |--------------|--------------|-----------|--------------|
 |GNU Lesser GPL3 |LGPL3|[../LICENSE](../LICENSE)|https://www.gnu.org/licenses/lgpl-3.0.en.html|
 |Creative Commons Attribution Share-Alike 4.0|[CC-BY-SA4.0](./CC-BY-SA-4.0)|https://creativecommons.org/licenses/by-sa/4.0/|
-|Creative Commons Share-Alike 4.0|[CC-SA4.0](./CC-SA-4.0)|https://creativecommons.org/licenses/by-sa/4.0/|
 |Creative Commons CC0|[CC-0](./CC-0-1.0)|https://creativecommons.org/publicdomain/zero/1.0/|
 |SIL Open Font License 1.1|OFL-1.1|[./SIL OPEN FONT LICENSE.txt](./SIL OPEN FONT LICENSE.txt)|https://opensource.org/licenses/OFL-1.1|
 
