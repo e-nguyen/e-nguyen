@@ -72,12 +72,18 @@ RUN groupadd --gid 3434 circleci \
 RUN pacman -S --noconfirm archey3
 
 # Vulkano dependencies
+RUN pacman -Qkk --noconfirm gcc glibc
 RUN pacman -S --noconfirm gcc7 cmake python
+
+# Shaderc dependencies
+RUN pacman -S --noconfirm shaderc gcc-libs asciidoctor \
+    cmake make glibc glslang spirv-tools
 
 # Rust dependencies
 RUN pacman -S --noconfirm unzip zlib binutils llvm gcc
 
 # Clear the package cache for teeny tiny image
+RUN pacman -Syu --noconfirm
 RUN pacman -Scc --noconfirm
 
 

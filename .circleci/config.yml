@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: kprime/e-nguyen-builder:0.0.3
+      - image: kprime/e-nguyen-builder:0.0.7
     steps:
       - checkout
       - restore_cache:
@@ -25,11 +25,12 @@ jobs:
       #       rustup run nightly cargo --version --verbose
       #       rustup run nightly cargo build
       - run:
-          name: Stable Build
+          name: Stable Check
           command: |
             rustup run stable rustc --version --verbose
             rustup run stable cargo --version --verbose
-            rustup run stable cargo build
+            rustup run stable cargo check --all -j 2
+          no_output_time: 30m
       - save_cache:
           key: rustup-cache
           paths:
