@@ -24,7 +24,7 @@ Clone this repository and run it (building will be performed if necessary).
 
 ```shell
 git clone https://github.com/e-nguyen/e-nguyen.git
-cargo run --release
+cargo run --release --fullscreen
 ```
 
 ## Troubleshooting
