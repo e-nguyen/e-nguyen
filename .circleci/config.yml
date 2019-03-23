@@ -1,0 +1,42 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: kprime/e-nguyen-builder:0.0.7
+    steps:
+      - checkout
+      - restore_cache:
+          key: project-cache
+      - restore_cache:          
+          key: rustup-cache
+      - run:
+          name: Update toolchains
+          command: |
+            rustup update
+      - run:
+          name: Check formatting
+          command: |
+            rustfmt --version
+            cargo fmt --
+      # - run:
+      #     name: Nightly Build
+      #     command: |
+      #       rustup run nightly rustc --version --verbose
+      #       rustup run nightly cargo --version --verbose
+      #       rustup run nightly cargo build
+      - run:
+          name: Stable Check
+          command: |
+            rustup run stable rustc --version --verbose
+            rustup run stable cargo --version --verbose
+            rustup run stable cargo check --all -j 2
+          no_output_time: 30m
+      - save_cache:
+          key: rustup-cache
+          paths:
+            - "~/.cargo"
+            - "~/.rustup"
+      - save_cache:
+          key: project-cache
+          paths:
+            - "./target"
