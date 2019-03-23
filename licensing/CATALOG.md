@@ -37,3 +37,5 @@ A copy of the license's text must be in this folder prior to using a license.
 |/logo/logo.png|CC-BY-SA4.0|https://github.com/knappador|
 |/logo/logo.xcf|CC-BY-SA4.0|https://github.com/knappador|
 |/font/MajorMonoDisplayRegular.ttf|OFL-1.1|https://fonts.google.com/specimen/Major+Mono+Display|
+|/.circleci/config.yaml|CC-0-1.0|https://github.com/e-nguyen/e-nguyen/commit/53ba19c6b57590a9c84be845fcc0febeda5f42db|
+|/.circleci/images/Dockerfile|CC-0-1.0|https://github.com/e-nguyen/e-nguyen/commit/53ba19c6b57590a9c84be845fcc0febeda5f42db|
