@@ -2,6 +2,7 @@
 name = "e-nguyen"
 description = "Build your own music visualizations"
 version = "0.1.0"
+readme = "README.md"
 keywords = ["vulkan", "3D", "graphics", "audio", "math"]
 categories = ["graphics", "multimedia", "visualization"]
 authors = ["E-Nguyen Developers", "Knapp <knappador@gmail.com>"]
