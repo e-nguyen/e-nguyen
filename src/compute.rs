@@ -56,7 +56,7 @@ pub struct AudioTexSource {
 
 impl AudioTexSource {
     pub fn new(height: usize) -> Result<AudioTexSource, Box<dyn Error>> {
-        let padded_bins = height;
+        let padded_bins = height * 2;
         let tex_height = height;
         Ok(AudioTexSource { tex_height: height, bins: padded_bins })
     }
@@ -184,7 +184,7 @@ impl AudioTexTap {
                 assert_eq!(source.tex_height as u32 % channel_combine::LOCAL_SIZE_X, 0);
                 let dispatch_x = source.tex_height as u32 / channel_combine::LOCAL_SIZE_X;
                 let cb = cb
-                    .dispatch([dispatch_x, 1, 1], pipeline.clone(), set.clone(), push_constants
+                    .dispatch([dispatch_x, 1, 1], pipeline.clone(), set.clone(), push_constants)
                     .unwrap()
                     .build()
                     .unwrap();

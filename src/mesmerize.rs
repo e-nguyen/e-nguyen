@@ -140,7 +140,7 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
         _r: &MezResources,
     ) -> Result<(MezFramer, MezState), Box<dyn Error>> {
         // creates a stream of image-futures we can use to copy to our fft_texture
-        let source = AudioTexSource::new(2048).unwrap();
+        let source = AudioTexSource::new(1024).unwrap();
         let tap =
             AudioTexTap::turn_on(source, swap_win.device.clone(), swap_win.window_queue.clone())
                 .unwrap();
