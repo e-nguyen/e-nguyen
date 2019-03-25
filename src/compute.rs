@@ -300,7 +300,7 @@ void main() {
     float right_sum = 0.0;
 
     {
-        float freq_center = fft.min_freq * pow(fft.log_scale, float(woven + 0.1));
+        float freq_center = fft.min_freq * pow(fft.log_scale, float(woven));
 
         float freq_start = fft.min_freq * pow(fft.log_scale, float(woven) + 0.5);
         uint start_tidx = uint(freq_start / fft.lin_res);
