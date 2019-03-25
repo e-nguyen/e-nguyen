@@ -237,7 +237,11 @@ float norm_tan(float unnormed);
 
 void main() {
     uint gidx = gl_GlobalInvocationID.x;
-    uint conjugate_index = gidx + fft.lin_bins / 2;
+    uint widx = gl_WorkGroupID.x;
+    uint lidx = gl_LocalInvocationID.x;
+    uint num_groups = gl_NumWorkGroups.x;
+    uint woven = widx + lidx * num_groups;
+    uint conjugate_index = woven + fft.lin_bins / 2;
     Complex l = left_chan.data[conjugate_index];
     Complex r = right_chan.data[conjugate_index];
     float mag_l = pow((pow(l.real, 2.0) + pow(l.imag, 2.0)), 0.5);
@@ -256,7 +260,7 @@ void main() {
                         0.1 * pow(mag_l * mag_r, 0.5),
                         3.0 *(mag_l - 1.4),
                         1.0);
-    imageStore(out_img, ivec2(0, int(gl_GlobalInvocationID.x)), out_col);
+    imageStore(out_img, ivec2(0, woven), out_col);
 }
 
 float norm_tan(float unnormed) {
