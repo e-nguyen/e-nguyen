@@ -234,6 +234,8 @@ layout (push_constant) uniform PushConstant {
 } fft;
 
 float norm_tan(float unnormed);
+float mag(Complex c);
+float phase(Complex c);
 
 void main() {
     uint gidx = gl_GlobalInvocationID.x;
@@ -244,10 +246,10 @@ void main() {
     uint conjugate_index = woven + fft.lin_bins / 2;
     Complex l = left_chan.data[conjugate_index];
     Complex r = right_chan.data[conjugate_index];
-    float mag_l = pow((pow(l.real, 2.0) + pow(l.imag, 2.0)), 0.5);
-    float mag_r = pow((pow(r.real, 2.0) + pow(r.imag, 2.0)), 0.5);
-    float phase_l = l.real != 0.0 ? norm_tan(atan(l.imag / l.real)) : 0.0;
-    float phase_r = r.real != 0.0 ? norm_tan(atan(r.imag / r.real)) : 0.0;
+    float mag_l = mag(l);
+    float mag_r = mag(r);
+    float phase_l = phase(l);
+    float phase_r = phase(r);
     float mix_fac;
     if (mag_l == 0.0) {
         mix_fac = 1.0;
@@ -263,8 +265,19 @@ void main() {
     imageStore(out_img, ivec2(0, woven), out_col);
 }
 
+// TODO this mapping is suspicious
 float norm_tan(float unnormed) {
     return (unnormed + HAPI) / IPI;
+}
+
+// magnitude
+float mag(Complex c) {
+    return pow((pow(c.real, 2.0) + pow(c.imag, 2.0)), 0.5);
+}
+
+// phase
+float phase(Complex c) {
+    return c.real != 0.0 ? norm_tan(atan(c.imag / c.real)) : 0.0;
 }
 "
 
