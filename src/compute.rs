@@ -176,8 +176,11 @@ impl AudioTexTap {
                     compute_queue.family(),
                 )
                 .unwrap();
+
+                assert_eq!(source.tex_height as u32 % channel_combine::LOCAL_SIZE_X, 0);
+                let dispatch_x = source.tex_height as u32 / channel_combine::LOCAL_SIZE_X;
                 let cb = cb
-                    .dispatch([64 as u32, 1, 1], pipeline.clone(), set.clone(), ())
+                    .dispatch([dispatch_x, 1, 1], pipeline.clone(), set.clone(), ())
                     .unwrap()
                     .build()
                     .unwrap();
@@ -204,6 +207,7 @@ impl Drop for AudioTexTap {
 }
 
 mod channel_combine {
+    pub static LOCAL_SIZE_X: u32 = 16; // this must match local size
     vulkano_shaders::shader! {
         ty: "compute",
         src: "
