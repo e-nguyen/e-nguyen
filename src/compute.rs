@@ -243,13 +243,14 @@ void main() {
     uint lidx = gl_LocalInvocationID.x;
     uint num_groups = gl_NumWorkGroups.x;
     uint woven = widx + lidx * num_groups;
-    uint conjugate_index = woven + fft.lin_bins / 2;
-    Complex l = left_chan.data[conjugate_index];
-    Complex r = right_chan.data[conjugate_index];
-    float mag_l = mag(l);
-    float mag_r = mag(r);
-    float phase_l = phase(l);
-    float phase_r = phase(r);
+    uint conjugate_index = fft.lin_bins - woven;
+    Complex conj_l = left_chan.data[conjugate_index];
+    Complex conj_r = right_chan.data[conjugate_index];
+    uint complex_index = woven;
+    Complex com_l = left_chan.data[complex_index];
+    Complex com_r = right_chan.data[complex_index];
+    float mag_l = (mag(com_l) + mag(conj_l)) * 0.5;
+    float mag_r = (mag(com_r) + mag(conj_r)) * 0.5;
     float mix_fac;
     if (mag_l == 0.0) {
         mix_fac = 1.0;
