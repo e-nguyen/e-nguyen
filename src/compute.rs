@@ -171,6 +171,10 @@ impl AudioTexTap {
                         .build()
                         .unwrap(),
                 );
+
+                let push_constants =
+                    channel_combine::ty::PushConstant { lin_bins: source.bins as u32 };
+
                 let cb = AutoCommandBufferBuilder::secondary_compute_simultaneous_use(
                     device.clone(),
                     compute_queue.family(),
@@ -180,7 +184,7 @@ impl AudioTexTap {
                 assert_eq!(source.tex_height as u32 % channel_combine::LOCAL_SIZE_X, 0);
                 let dispatch_x = source.tex_height as u32 / channel_combine::LOCAL_SIZE_X;
                 let cb = cb
-                    .dispatch([dispatch_x, 1, 1], pipeline.clone(), set.clone(), ())
+                    .dispatch([dispatch_x, 1, 1], pipeline.clone(), set.clone(), push_constants
                     .unwrap()
                     .build()
                     .unwrap();
@@ -225,13 +229,17 @@ layout(local_size_x=16, local_size_y=1, local_size_z=1) in;
 layout(set = 0, binding = 0) buffer LeftData {Complex data[];} left_chan;
 layout(set = 0, binding = 1) buffer RightData {Complex data[];} right_chan;
 layout (set = 0, binding = 2, rgba32f)  uniform image2D out_img;
+layout (push_constant) uniform PushConstant {
+    uint lin_bins;
+} fft;
 
 float norm_tan(float unnormed);
 
 void main() {
-    uint idx = gl_GlobalInvocationID.x;
-    Complex l = left_chan.data[idx]; 
-    Complex r = right_chan.data[idx];
+    uint gidx = gl_GlobalInvocationID.x;
+    uint conjugate_index = gidx + fft.lin_bins / 2;
+    Complex l = left_chan.data[conjugate_index];
+    Complex r = right_chan.data[conjugate_index];
     float mag_l = pow((pow(l.real, 2.0) + pow(l.imag, 2.0)), 0.5);
     float mag_r = pow((pow(r.real, 2.0) + pow(r.imag, 2.0)), 0.5);
     float phase_l = l.real != 0.0 ? norm_tan(atan(l.imag / l.real)) : 0.0;
