@@ -301,30 +301,46 @@ void main() {
 
     {
         float freq_center = fft.min_freq * pow(fft.log_scale, float(woven));
+        float log_bin_start_f = fft.min_freq * pow(fft.log_scale, float(woven) - 0.5);
+        float log_bin_end_f = fft.min_freq * pow(fft.log_scale, float(woven) + 0.5);
 
-        float freq_start = fft.min_freq * pow(fft.log_scale, float(woven) + 0.5);
-        uint start_tidx = uint(freq_start / fft.lin_res);
-        float freq_end = fft.min_freq * pow(fft.log_scale, float(woven) + 1.5);
-        uint end_tidx = uint(freq_end / fft.lin_res);
+        uint start_cen_idx = clamp(uint(log_bin_start_f / fft.lin_res) - 1, 1, fft.lin_bins - 2);
+        uint end_cen_idx = clamp(uint(log_bin_end_f / fft.lin_res) + 1, 1, fft.lin_bins - 2);
 
-        // fractional samples
-        float start_bin_start_freq = float(start_tidx - 1) * fft.lin_res;
-        float start_bin_end_freq = float(start_tidx + 1) * fft.lin_res;
-        float start_frac = (start_bin_end_freq - freq_start) / 
-                           (start_bin_end_freq - start_bin_start_freq);
-        float end_bin_start_freq = float(end_tidx - 1) * fft.lin_res;
-        float end_bin_end_freq = float(end_tidx + 1) * fft.lin_res;
-        float end_frac = (freq_end - end_bin_start_freq) /
-                         (end_bin_end_freq - end_bin_start_freq);
+        uint lin_bin_cen_idx = start_cen_idx;
+        while (lin_bin_cen_idx >= start_cen_idx && lin_bin_cen_idx <= end_cen_idx) {
 
-        float tex_frac = start_frac;
-        uint tidx = start_tidx;
-        while (tidx >= start_tidx && tidx <= end_tidx) {
-            if (start_tidx == end_tidx) {
-                tex_frac = 1.0;
+            uint lin_bin_start_idx = lin_bin_cen_idx - 1;
+            uint lin_bin_end_idx = lin_bin_cen_idx + 1;
+            float lin_bin_start_f = float(lin_bin_start_idx) * fft.lin_res;
+            float lin_bin_end_f = float(lin_bin_end_idx) * fft.lin_res;
+            float lin_bin_size = lin_bin_end_f - lin_bin_start_f;
+
+            float lin_bin_frac;
+            if (log_bin_start_f < lin_bin_start_f) {
+                if (log_bin_end_f > lin_bin_end_f) {
+                    lin_bin_frac = 1.0;
+                } else {
+                    if (log_bin_end_f < lin_bin_start_f) {
+                        lin_bin_frac = 0.0;
+                    } else {
+                        lin_bin_frac = (log_bin_end_f - lin_bin_start_f) / lin_bin_size;
+                    }
+                }
+            } else {
+                if (log_bin_end_f > lin_bin_end_f) {
+                    if (log_bin_start_f > lin_bin_end_f) {
+                        lin_bin_frac = 0.0;
+                    } else {
+                        lin_bin_frac = (lin_bin_end_f - log_bin_start_f) / lin_bin_size;
+                    }
+                } else {
+                    lin_bin_frac = (log_bin_end_f - log_bin_start_f) / lin_bin_size;
+                }
             }
-            uint conjugate_index = fft.lin_bins - 1 - start_tidx;
-            uint complex_index = start_tidx;
+
+            uint conjugate_index = fft.lin_bins - 1 - lin_bin_cen_idx;
+            uint complex_index = lin_bin_cen_idx;
             Complex conj_l = left_chan.data[conjugate_index];
             Complex conj_r = right_chan.data[conjugate_index];
 
@@ -334,14 +350,10 @@ void main() {
             float mag_l = (mag(com_l) + mag(conj_l)) * 0.5;
             float mag_r = (mag(com_r) + mag(conj_r)) * 0.5;
 
-            left_sum += mag_l * tex_frac;
-            right_sum += mag_r * tex_frac;
-            tidx++;
-            if (tidx == end_tidx) {
-                tex_frac = end_frac;
-            } else {
-                tex_frac = 1.0;
-            }
+            left_sum += mag_l * lin_bin_frac;
+            right_sum += mag_r * lin_bin_frac;
+
+            lin_bin_cen_idx++;
         }
     }
 
