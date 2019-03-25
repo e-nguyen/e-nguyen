@@ -166,7 +166,7 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
 
         let fft_texture = StorageImage::new(
             swap_win.device.clone(),
-            Dimensions::Dim2d { width: 1024, height: 1024 },
+            Dimensions::Dim2d { width: 2048, height: 1024 },
             Format::R32G32B32A32Sfloat,
             Some(swap_win.window_queue.family()),
         )
@@ -295,7 +295,7 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
                 )
                 .unwrap();
             x += 1;
-            if x + 1 > 1024 {
+            if x + 1 > 2048 {
                 x = 0;
             }
             self.fft_tex_index = x;

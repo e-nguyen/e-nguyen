@@ -114,7 +114,7 @@ pub enum RingState {
 pub struct SimpleSource {
     name: Box<String>,
     index: u32,
-    rate: u32,
+    pub rate: u32,
     channels: u8,
     sample_format: Format,
 }

@@ -81,6 +81,8 @@ impl AudioTexTap {
         let kill_watch = killed.clone();
 
         let hot_handle = thread::spawn(move || {
+            let draw_log_scale = LogScale::new(source.tex_height, 40_f64, MAX_AUDIBLE);
+
             let mut left_input: Vec<Complex<f32>> = vec![Zero::zero(); source.bins];
             let mut right_input: Vec<Complex<f32>> = vec![Zero::zero(); source.bins];
             let mut output: Vec<Complex<f32>> = vec![Zero::zero(); source.bins];
@@ -98,6 +100,8 @@ impl AudioTexTap {
             let mut stream_buf =
                 BytesMut::with_capacity(target_bytes_per_frame * 6 + 32 * source.bins);
             let mut audio: Vec<i16> = vec![0; source.bins * 2];
+
+            let lin_fft_res = (source_def.rate / 2) as f64 / (source.bins / 2) as f64; // Nyquist limit / nbins
 
             let norm = 1.0 / (i16::max_value() as f32);
 
@@ -172,8 +176,13 @@ impl AudioTexTap {
                         .unwrap(),
                 );
 
-                let push_constants =
-                    channel_combine::ty::PushConstant { lin_bins: source.bins as u32 };
+                let push_constants = channel_combine::ty::PushConstant {
+                    lin_bins: source.bins as u32,
+                    log_scale: draw_log_scale.log_bin_ratio as f32,
+                    lin_res: lin_fft_res as f32,
+                    min_freq: draw_log_scale.min_freq as f32,
+                    max_freq: draw_log_scale.max_freq as f32,
+                };
 
                 let cb = AutoCommandBufferBuilder::secondary_compute_simultaneous_use(
                     device.clone(),
@@ -210,6 +219,45 @@ impl Drop for AudioTexTap {
     }
 }
 
+static MAX_AUDIBLE: f64 = 20000_f64;
+static MIN_AUDIBLE: f64 = 20_f64;
+
+struct LogScale {
+    n_log_bins: usize,
+    n_lin_bins: usize,
+    log_bin_ratio: f64,
+    min_freq: f64,
+    max_freq: f64,
+}
+
+impl LogScale {
+    fn new(log_bins: usize, f_min: f64, f_max: f64) -> LogScale {
+        assert!(f_min < MAX_AUDIBLE);
+        assert!(f_max > MIN_AUDIBLE);
+        assert!(f_max > f_min);
+
+        let f_max = if f_max > MAX_AUDIBLE { MAX_AUDIBLE } else { f_max };
+        let f_min = if f_min < MIN_AUDIBLE { MIN_AUDIBLE } else { f_min };
+
+        let f64_log_bins = log_bins as f64;
+
+        // the (1 / n_log_bins) power takes the n_log_binsth root which will
+        // make a the ratio of successors of our logorithmic frequency bins
+        let a = (f_max / f_min).powf(1.0_f64 / (f64_log_bins - 1_f64));
+
+        // worst-case resolution
+        let min_log_res = f_min * (a - 1.0_f64);
+        let n_lin_bins = f_max / min_log_res;
+        LogScale {
+            n_log_bins: log_bins,
+            n_lin_bins: n_lin_bins as usize,
+            log_bin_ratio: a,
+            min_freq: f_min,
+            max_freq: f_max,
+        }
+    }
+}
+
 mod channel_combine {
     pub static LOCAL_SIZE_X: u32 = 16; // this must match local size
     vulkano_shaders::shader! {
@@ -231,6 +279,10 @@ layout(set = 0, binding = 1) buffer RightData {Complex data[];} right_chan;
 layout (set = 0, binding = 2, rgba32f)  uniform image2D out_img;
 layout (push_constant) uniform PushConstant {
     uint lin_bins;
+    float log_scale;
+    float lin_res;
+    float min_freq;
+    float max_freq;
 } fft;
 
 float norm_tan(float unnormed);
@@ -243,26 +295,61 @@ void main() {
     uint lidx = gl_LocalInvocationID.x;
     uint num_groups = gl_NumWorkGroups.x;
     uint woven = widx + lidx * num_groups;
-    uint conjugate_index = fft.lin_bins - woven;
-    Complex conj_l = left_chan.data[conjugate_index];
-    Complex conj_r = right_chan.data[conjugate_index];
-    uint complex_index = woven;
-    Complex com_l = left_chan.data[complex_index];
-    Complex com_r = right_chan.data[complex_index];
-    float mag_l = (mag(com_l) + mag(conj_l)) * 0.5;
-    float mag_r = (mag(com_r) + mag(conj_r)) * 0.5;
-    float mix_fac;
-    if (mag_l == 0.0) {
-        mix_fac = 1.0;
-    } else if (mag_r == 0.0) {
-        mix_fac = 0.0;
-    } else {
-        mix_fac = mag_l > mag_r ? mag_r / mag_l : mag_l / mag_r;
+
+    float left_sum = 0.0;
+    float right_sum = 0.0;
+
+    {
+        float freq_center = fft.min_freq * pow(fft.log_scale, float(woven + 0.1));
+
+        float freq_start = fft.min_freq * pow(fft.log_scale, float(woven) + 0.5);
+        uint start_tidx = uint(freq_start / fft.lin_res);
+        float freq_end = fft.min_freq * pow(fft.log_scale, float(woven) + 1.5);
+        uint end_tidx = uint(freq_end / fft.lin_res);
+
+        // fractional samples
+        float start_bin_start_freq = float(start_tidx - 1) * fft.lin_res;
+        float start_bin_end_freq = float(start_tidx + 1) * fft.lin_res;
+        float start_frac = (start_bin_end_freq - freq_start) / 
+                           (start_bin_end_freq - start_bin_start_freq);
+        float end_bin_start_freq = float(end_tidx - 1) * fft.lin_res;
+        float end_bin_end_freq = float(end_tidx + 1) * fft.lin_res;
+        float end_frac = (freq_end - end_bin_start_freq) /
+                         (end_bin_end_freq - end_bin_start_freq);
+
+        float tex_frac = start_frac;
+        uint tidx = start_tidx;
+        while (tidx >= start_tidx && tidx <= end_tidx) {
+            if (start_tidx == end_tidx) {
+                tex_frac = 1.0;
+            }
+            uint conjugate_index = fft.lin_bins - 1 - start_tidx;
+            uint complex_index = start_tidx;
+            Complex conj_l = left_chan.data[conjugate_index];
+            Complex conj_r = right_chan.data[conjugate_index];
+
+            Complex com_l = left_chan.data[complex_index];
+            Complex com_r = right_chan.data[complex_index];
+        
+            float mag_l = (mag(com_l) + mag(conj_l)) * 0.5;
+            float mag_r = (mag(com_r) + mag(conj_r)) * 0.5;
+
+            left_sum += mag_l * tex_frac;
+            right_sum += mag_r * tex_frac;
+            tidx++;
+            if (tidx == end_tidx) {
+                tex_frac = end_frac;
+            } else {
+                tex_frac = 1.0;
+            }
+        }
     }
-    vec4 out_col = vec4(0.3 * (mag_r - 0.2), 
-                        0.1 * pow(mag_l * mag_r, 0.5),
-                        3.0 *(mag_l - 1.4),
+
+    vec4 out_col = vec4(0.4 * (right_sum - 1.5), 
+                        0.1 * (pow(left_sum * right_sum, 0.5) - 4.0),
+                        0.8 *(left_sum - 3.0),
                         1.0);
+
     imageStore(out_img, ivec2(0, woven), out_col);
 }
 
