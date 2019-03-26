@@ -3,6 +3,8 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## Master
+
+## 0.1.1
 ### Added
 - Changelog
 ### Changed
