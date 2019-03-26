@@ -4,6 +4,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## Master
 
+## 0.1.2
+### Changed
+- Re-publishing on Crates.io.  No changes.
+
 ## 0.1.1
 ### Added
 - Changelog
