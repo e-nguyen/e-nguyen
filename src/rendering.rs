@@ -81,6 +81,26 @@ void main() {
     }
 }
 
+pub mod uv_scroll_fsm {
+    vulkano_shaders::shader! {
+    ty: "fragment",
+        src: "
+#version 450
+
+layout(location = 0) in vec2 tex_coords;
+layout(location = 0) out vec4 f_color;
+layout(set = 0, binding = 0) uniform sampler2D tex;
+layout (push_constant) uniform PushConstant {
+    float offset_fac;
+} scroll;
+
+void main() {
+    vec2 scrolled_coords = vec2(scroll.offset_fac - float(tex_coords.x), tex_coords.y);
+    f_color = texture(tex, scrolled_coords);
+}"
+    }
+}
+
 pub mod diag_grad_vsm {
     vulkano_shaders::shader! {
         ty: "vertex",
