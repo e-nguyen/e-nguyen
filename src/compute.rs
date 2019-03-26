@@ -56,7 +56,7 @@ pub struct AudioTexSource {
 
 impl AudioTexSource {
     pub fn new(height: usize) -> Result<AudioTexSource, Box<dyn Error>> {
-        let padded_bins = height;
+        let padded_bins = height * 2;
         let tex_height = height;
         Ok(AudioTexSource { tex_height: height, bins: padded_bins })
     }
@@ -81,12 +81,17 @@ impl AudioTexTap {
         let kill_watch = killed.clone();
 
         let hot_handle = thread::spawn(move || {
-            let mut left_input: Vec<Complex<f32>> = vec![Zero::zero(); source.bins];
-            let mut right_input: Vec<Complex<f32>> = vec![Zero::zero(); source.bins];
-            let mut output: Vec<Complex<f32>> = vec![Zero::zero(); source.bins];
+            let draw_log_scale = LogScale::new(source.tex_height, 220_f64, 22000_f64);
+            // let largest_bin = 64;
+            // let fft_log_scale = LogScale::new(source.tex_height / largest_bin, 80_f64, 22000_f64);
+            let lin_bins = 3000;
+
+            let mut left_input: Vec<Complex<f32>> = vec![Zero::zero(); lin_bins];
+            let mut right_input: Vec<Complex<f32>> = vec![Zero::zero(); lin_bins];
+            let mut output: Vec<Complex<f32>> = vec![Zero::zero(); lin_bins];
 
             let mut planner = FFTplanner::new(false);
-            let fft = planner.plan_fft(source.bins);
+            let fft = planner.plan_fft(lin_bins);
             let fft_bufpool: CpuBufferPool<Complex<f32>> =
                 CpuBufferPool::new(device.clone(), BufferUsage::all());
             let mut pastream = PaStream::default();
@@ -94,10 +99,12 @@ impl AudioTexTap {
             let (rx, source_def) = pastream.heat().unwrap();
             let byte_rate = source_def.byte_rate();
             let target_bytes_per_frame = (byte_rate / 60) as usize;
-            let fft_byte_len: usize = source.bins * 4; // Complex<f32>
+            let fft_byte_len: usize = lin_bins * 4; // Complex<f32>
             let mut stream_buf =
-                BytesMut::with_capacity(target_bytes_per_frame * 6 + 32 * source.bins);
-            let mut audio: Vec<i16> = vec![0; source.bins * 2];
+                BytesMut::with_capacity(target_bytes_per_frame * 6 + 32 * lin_bins);
+            let mut audio: Vec<i16> = vec![0; lin_bins * 2];
+
+            let lin_fft_res = (source_def.rate / 2) as f64 / (lin_bins / 2) as f64; // Nyquist limit / nbins
 
             let norm = 1.0 / (i16::max_value() as f32);
 
@@ -171,13 +178,25 @@ impl AudioTexTap {
                         .build()
                         .unwrap(),
                 );
+
+                let push_constants = channel_combine::ty::PushConstant {
+                    lin_bins: lin_bins as u32,
+                    log_scale: draw_log_scale.log_bin_ratio as f32,
+                    lin_res: lin_fft_res as f32,
+                    min_freq: draw_log_scale.min_freq as f32,
+                    max_freq: draw_log_scale.max_freq as f32,
+                };
+
                 let cb = AutoCommandBufferBuilder::secondary_compute_simultaneous_use(
                     device.clone(),
                     compute_queue.family(),
                 )
                 .unwrap();
+
+                assert_eq!(source.tex_height as u32 % channel_combine::LOCAL_SIZE_X, 0);
+                let dispatch_x = source.tex_height as u32 / channel_combine::LOCAL_SIZE_X;
                 let cb = cb
-                    .dispatch([64 as u32, 1, 1], pipeline.clone(), set.clone(), ())
+                    .dispatch([dispatch_x, 1, 1], pipeline.clone(), set.clone(), push_constants)
                     .unwrap()
                     .build()
                     .unwrap();
@@ -203,7 +222,47 @@ impl Drop for AudioTexTap {
     }
 }
 
+static MAX_AUDIBLE: f64 = 20000_f64;
+static MIN_AUDIBLE: f64 = 20_f64;
+
+struct LogScale {
+    n_log_bins: usize,
+    n_lin_bins: usize,
+    log_bin_ratio: f64,
+    min_freq: f64,
+    max_freq: f64,
+}
+
+impl LogScale {
+    fn new(log_bins: usize, f_min: f64, f_max: f64) -> LogScale {
+        assert!(f_min < MAX_AUDIBLE);
+        assert!(f_max > MIN_AUDIBLE);
+        assert!(f_max > f_min);
+
+        let f_max = if f_max > MAX_AUDIBLE { MAX_AUDIBLE } else { f_max };
+        let f_min = if f_min < MIN_AUDIBLE { MIN_AUDIBLE } else { f_min };
+
+        let f64_log_bins = log_bins as f64;
+
+        // the (1 / n_log_bins) power takes the n_log_binsth root which will
+        // make a the ratio of successors of our logorithmic frequency bins
+        let a = (f_max / f_min).powf(1.0_f64 / (f64_log_bins - 1_f64));
+
+        // worst-case resolution
+        let min_log_res = f_min * (a - 1.0_f64);
+        let n_lin_bins = f_max / min_log_res;
+        LogScale {
+            n_log_bins: log_bins,
+            n_lin_bins: n_lin_bins as usize,
+            log_bin_ratio: a,
+            min_freq: f_min,
+            max_freq: f_max,
+        }
+    }
+}
+
 mod channel_combine {
+    pub static LOCAL_SIZE_X: u32 = 16; // this must match local size
     vulkano_shaders::shader! {
         ty: "compute",
         src: "
@@ -221,34 +280,107 @@ layout(local_size_x=16, local_size_y=1, local_size_z=1) in;
 layout(set = 0, binding = 0) buffer LeftData {Complex data[];} left_chan;
 layout(set = 0, binding = 1) buffer RightData {Complex data[];} right_chan;
 layout (set = 0, binding = 2, rgba32f)  uniform image2D out_img;
+layout (push_constant) uniform PushConstant {
+    uint lin_bins;
+    float log_scale;
+    float lin_res;
+    float min_freq;
+    float max_freq;
+} fft;
 
 float norm_tan(float unnormed);
+float mag(Complex c);
+float phase(Complex c);
 
 void main() {
-    uint idx = gl_GlobalInvocationID.x;
-    Complex l = left_chan.data[idx]; 
-    Complex r = right_chan.data[idx];
-    float mag_l = pow((pow(l.real, 2.0) + pow(l.imag, 2.0)), 0.5);
-    float mag_r = pow((pow(r.real, 2.0) + pow(r.imag, 2.0)), 0.5);
-    float phase_l = l.real != 0.0 ? norm_tan(atan(l.imag / l.real)) : 0.0;
-    float phase_r = r.real != 0.0 ? norm_tan(atan(r.imag / r.real)) : 0.0;
-    float mix_fac;
-    if (mag_l == 0.0) {
-        mix_fac = 1.0;
-    } else if (mag_r == 0.0) {
-        mix_fac = 0.0;
-    } else {
-        mix_fac = mag_l > mag_r ? mag_r / mag_l : mag_l / mag_r;
+    uint gidx = gl_GlobalInvocationID.x;
+    uint widx = gl_WorkGroupID.x;
+    uint lidx = gl_LocalInvocationID.x;
+    uint num_groups = gl_NumWorkGroups.x;
+    uint woven = widx + lidx * num_groups;
+
+    float left_sum = 0.0;
+    float right_sum = 0.0;
+
+    {
+        float freq_center = fft.min_freq * pow(fft.log_scale, float(woven));
+        float log_bin_start_f = fft.min_freq * pow(fft.log_scale, float(woven) - 0.5);
+        float log_bin_end_f = fft.min_freq * pow(fft.log_scale, float(woven) + 0.5);
+
+        uint start_cen_idx = clamp(uint(log_bin_start_f / fft.lin_res) - 1, 1, fft.lin_bins - 2);
+        uint end_cen_idx = clamp(uint(log_bin_end_f / fft.lin_res) + 1, 1, fft.lin_bins - 2);
+
+        uint lin_bin_cen_idx = start_cen_idx;
+        while (lin_bin_cen_idx >= start_cen_idx && lin_bin_cen_idx <= end_cen_idx) {
+
+            uint lin_bin_start_idx = lin_bin_cen_idx - 1;
+            uint lin_bin_end_idx = lin_bin_cen_idx + 1;
+            float lin_bin_start_f = float(lin_bin_start_idx) * fft.lin_res;
+            float lin_bin_end_f = float(lin_bin_end_idx) * fft.lin_res;
+            float lin_bin_size = lin_bin_end_f - lin_bin_start_f;
+
+            float lin_bin_frac;
+            if (log_bin_start_f < lin_bin_start_f) {
+                if (log_bin_end_f > lin_bin_end_f) {
+                    lin_bin_frac = 1.0;
+                } else {
+                    if (log_bin_end_f < lin_bin_start_f) {
+                        lin_bin_frac = 0.0;
+                    } else {
+                        lin_bin_frac = (log_bin_end_f - lin_bin_start_f) / lin_bin_size;
+                    }
+                }
+            } else {
+                if (log_bin_end_f > lin_bin_end_f) {
+                    if (log_bin_start_f > lin_bin_end_f) {
+                        lin_bin_frac = 0.0;
+                    } else {
+                        lin_bin_frac = (lin_bin_end_f - log_bin_start_f) / lin_bin_size;
+                    }
+                } else {
+                    lin_bin_frac = (log_bin_end_f - log_bin_start_f) / lin_bin_size;
+                }
+            }
+
+            uint conjugate_index = fft.lin_bins - 1 - lin_bin_cen_idx;
+            uint complex_index = lin_bin_cen_idx;
+            Complex conj_l = left_chan.data[conjugate_index];
+            Complex conj_r = right_chan.data[conjugate_index];
+
+            Complex com_l = left_chan.data[complex_index];
+            Complex com_r = right_chan.data[complex_index];
+        
+            float mag_l = (mag(com_l) + mag(conj_l)) * 0.5;
+            float mag_r = (mag(com_r) + mag(conj_r)) * 0.5;
+
+            left_sum += mag_l * lin_bin_frac;
+            right_sum += mag_r * lin_bin_frac;
+
+            lin_bin_cen_idx++;
+        }
     }
-    vec4 out_col = vec4(0.3 * (mag_r - 0.2), 
-                        0.1 * pow(mag_l * mag_r, 0.5),
-                        3.0 *(mag_l - 1.4),
+
+    vec4 out_col = vec4(0.04 * (pow(left_sum * right_sum, 0.5) - 0.3),
+                        0.06 * (right_sum - 0.8),
+                        0.08 * (left_sum - 0.4),
                         1.0);
-    imageStore(out_img, ivec2(0, int(gl_GlobalInvocationID.x)), out_col);
+
+    imageStore(out_img, ivec2(0, woven), out_col);
 }
 
+// TODO this mapping is suspicious
 float norm_tan(float unnormed) {
     return (unnormed + HAPI) / IPI;
+}
+
+// magnitude
+float mag(Complex c) {
+    return pow((pow(c.real, 2.0) + pow(c.imag, 2.0)), 0.5);
+}
+
+// phase
+float phase(Complex c) {
+    return c.real != 0.0 ? norm_tan(atan(c.imag / c.real)) : 0.0;
 }
 "
 

@@ -18,7 +18,7 @@ use crate::compute::{AudioTex, AudioTexSource, AudioTexTap};
 use crate::ewin::{GpuPicker, SwapWindow};
 use crate::input;
 use crate::input::{KeyTracker, MouseTracker, UserEvent};
-use crate::rendering::{uv_image_fsm, uv_image_vsm, FrameState, Framer, XyUvVertex};
+use crate::rendering::{uv_image_vsm, uv_scroll_fsm, FrameState, Framer, XyUvVertex};
 
 use log::error;
 use std::error::Error;
@@ -140,13 +140,13 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
         _r: &MezResources,
     ) -> Result<(MezFramer, MezState), Box<dyn Error>> {
         // creates a stream of image-futures we can use to copy to our fft_texture
-        let source = AudioTexSource::new(2048).unwrap();
+        let source = AudioTexSource::new(1024).unwrap();
         let tap =
             AudioTexTap::turn_on(source, swap_win.device.clone(), swap_win.window_queue.clone())
                 .unwrap();
 
         let vs = uv_image_vsm::Shader::load(swap_win.device.clone())?;
-        let fs = uv_image_fsm::Shader::load(swap_win.device.clone())?;
+        let fs = uv_scroll_fsm::Shader::load(swap_win.device.clone())?;
 
         let render_pass = Arc::new(vulkano::single_pass_renderpass!(swap_win.device.clone(),
                                          attachments: {
@@ -177,10 +177,10 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
                 swap_win.device.clone(),
                 BufferUsage::all(),
                 [
-                    XyUvVertex { position: [-1.0, -1.0], uv: [0.0, 0.0] },
-                    XyUvVertex { position: [1.0, -1.0], uv: [1.0, 0.0] },
-                    XyUvVertex { position: [-1.0, 1.0], uv: [0.0, 1.0] },
-                    XyUvVertex { position: [1.0, 1.0], uv: [1.0, 1.0] },
+                    XyUvVertex { position: [1.0, 1.0], uv: [0.0, 0.0] },
+                    XyUvVertex { position: [-1.0, 1.0], uv: [1.0, 0.0] },
+                    XyUvVertex { position: [1.0, -1.0], uv: [0.0, 1.0] },
+                    XyUvVertex { position: [-1.0, -1.0], uv: [1.0, 1.0] },
                 ]
                 .iter()
                 .cloned(),
@@ -193,7 +193,7 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
             Filter::Linear,
             Filter::Linear,
             MipmapMode::Nearest,
-            SamplerAddressMode::ClampToEdge,
+            SamplerAddressMode::Repeat,
             SamplerAddressMode::ClampToEdge,
             SamplerAddressMode::ClampToEdge,
             0.0,
@@ -302,6 +302,9 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
             self.audio_tex = None;
         }
 
+        let push_constants =
+            uv_scroll_fsm::ty::PushConstant { offset_fac: self.fft_tex_index as f32 / 1024_f32 };
+
         if self.audio_tex.is_none() {
             self.audio_tex = self.audio_tex_tap.tap.try_recv().ok();
         }
@@ -313,7 +316,7 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
                 &swap_win.dynamic_state,
                 vec![self.background_rect.clone()],
                 self.set.clone(),
-                (),
+                push_constants,
             )?
             .end_render_pass()?;
         let cb = cbb.build()?;
