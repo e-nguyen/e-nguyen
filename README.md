@@ -1,5 +1,7 @@
 # E-Nguyen
 
+[![Prototype Phase Complete!  Real-time-ish Spectrogram]](https://github.com/e-nguyen/e-nguyen/tree/master/logo/preview_0.1.1.png)
+
 [![CircleCI](https://circleci.com/gh/e-nguyen/e-nguyen.svg?style=shield&circle)](https://circleci.com/gh/e-nguyen/e-nguyen)
 [![Published on Crates.io](https://img.shields.io/crates/v/e-nguyen.svg)](https://crates.io/crates/e-nguyen)
 [![LGPL Licensed](https://img.shields.io/crates/l/e-nguyen.svg)](https://www.gnu.org/licenses/lgpl-3.0-standalone.html)
@@ -40,4 +42,4 @@ Please review the [Contributing](CONTRIBUTING.md) document and remember to doubl
 
 Fresh off the press. Architecture for visualizaiton composition and other documentation inbound.  Get involved!
 
-Currently only the PulseAudio sound server can be monitored.
+Currently only the PulseAudio sound server (Linux) can be monitored.
