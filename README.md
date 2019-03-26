@@ -34,6 +34,8 @@ cargo run --release --fullscreen
 
 For graphics issues, first try building and running examples from the [Vulkano](https://github.com/vulkano-rs/vulkano) project.  The teapot and other examples should run.
 
+The Wiki contains some information about configuring and tuning your sound server for E-Nguyen to play well.
+
 ## Contributing
 
 Please review the [Contributing](CONTRIBUTING.md) document and remember to double-emoji your PR's to leave a verifiable record and enable the LGPL and other protections.
