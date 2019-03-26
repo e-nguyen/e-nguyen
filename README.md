@@ -1,6 +1,6 @@
 # E-Nguyen
 
-[!Prototype Phase Complete!  Real-time-ish Spectrogram](https://github.com/e-nguyen/e-nguyen/tree/master/logo/preview_0.1.1.png)
+![Prototype Phase Complete!  Real-time-ish Spectrogram](https://raw.githubusercontent.com/e-nguyen/e-nguyen/master/logo/preview_0.1.1.png)
 
 [![CircleCI](https://circleci.com/gh/e-nguyen/e-nguyen.svg?style=shield&circle)](https://circleci.com/gh/e-nguyen/e-nguyen)
 [![Published on Crates.io](https://img.shields.io/crates/v/e-nguyen.svg)](https://crates.io/crates/e-nguyen)
