@@ -360,9 +360,9 @@ void main() {
         }
     }
 
-    vec4 out_col = vec4(0.4 * (right_sum - 1.5), 
-                        0.1 * (pow(left_sum * right_sum, 0.5) - 4.0),
-                        0.8 *(left_sum - 3.0),
+    vec4 out_col = vec4(0.04 * (pow(left_sum * right_sum, 0.5) - 0.3),
+                        0.06 * (right_sum - 0.8),
+                        0.08 * (left_sum - 0.4),
                         1.0);
 
     imageStore(out_img, ivec2(0, woven), out_col);
