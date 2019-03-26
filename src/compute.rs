@@ -81,14 +81,17 @@ impl AudioTexTap {
         let kill_watch = killed.clone();
 
         let hot_handle = thread::spawn(move || {
-            let draw_log_scale = LogScale::new(source.tex_height, 40_f64, MAX_AUDIBLE);
+            let draw_log_scale = LogScale::new(source.tex_height, 220_f64, 22000_f64);
+            // let largest_bin = 64;
+            // let fft_log_scale = LogScale::new(source.tex_height / largest_bin, 80_f64, 22000_f64);
+            let lin_bins = 3000;
 
-            let mut left_input: Vec<Complex<f32>> = vec![Zero::zero(); source.bins];
-            let mut right_input: Vec<Complex<f32>> = vec![Zero::zero(); source.bins];
-            let mut output: Vec<Complex<f32>> = vec![Zero::zero(); source.bins];
+            let mut left_input: Vec<Complex<f32>> = vec![Zero::zero(); lin_bins];
+            let mut right_input: Vec<Complex<f32>> = vec![Zero::zero(); lin_bins];
+            let mut output: Vec<Complex<f32>> = vec![Zero::zero(); lin_bins];
 
             let mut planner = FFTplanner::new(false);
-            let fft = planner.plan_fft(source.bins);
+            let fft = planner.plan_fft(lin_bins);
             let fft_bufpool: CpuBufferPool<Complex<f32>> =
                 CpuBufferPool::new(device.clone(), BufferUsage::all());
             let mut pastream = PaStream::default();
@@ -96,12 +99,12 @@ impl AudioTexTap {
             let (rx, source_def) = pastream.heat().unwrap();
             let byte_rate = source_def.byte_rate();
             let target_bytes_per_frame = (byte_rate / 60) as usize;
-            let fft_byte_len: usize = source.bins * 4; // Complex<f32>
+            let fft_byte_len: usize = lin_bins * 4; // Complex<f32>
             let mut stream_buf =
-                BytesMut::with_capacity(target_bytes_per_frame * 6 + 32 * source.bins);
-            let mut audio: Vec<i16> = vec![0; source.bins * 2];
+                BytesMut::with_capacity(target_bytes_per_frame * 6 + 32 * lin_bins);
+            let mut audio: Vec<i16> = vec![0; lin_bins * 2];
 
-            let lin_fft_res = (source_def.rate / 2) as f64 / (source.bins / 2) as f64; // Nyquist limit / nbins
+            let lin_fft_res = (source_def.rate / 2) as f64 / (lin_bins / 2) as f64; // Nyquist limit / nbins
 
             let norm = 1.0 / (i16::max_value() as f32);
 
@@ -177,7 +180,7 @@ impl AudioTexTap {
                 );
 
                 let push_constants = channel_combine::ty::PushConstant {
-                    lin_bins: source.bins as u32,
+                    lin_bins: lin_bins as u32,
                     log_scale: draw_log_scale.log_bin_ratio as f32,
                     lin_res: lin_fft_res as f32,
                     min_freq: draw_log_scale.min_freq as f32,
