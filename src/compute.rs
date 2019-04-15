@@ -200,8 +200,12 @@ impl AudioTexTap {
                     .unwrap()
                     .build()
                     .unwrap();
-                let future =
-                    sync::now(device.clone()).then_execute(compute_queue.clone(), cb).unwrap();
+                let future = sync::now(device.clone())
+                    .then_execute(compute_queue.clone(), cb)
+                    .unwrap()
+                    .then_signal_fence_and_flush()
+                    .unwrap();
+                future.wait(None).unwrap();
                 let result = AudioTex { ready: Box::new(future), buffer: out_buf.clone() };
                 tx.send(result).unwrap();
             }

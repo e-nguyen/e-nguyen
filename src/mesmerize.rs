@@ -283,6 +283,8 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
         .unwrap();
 
         if let Some(r) = ready {
+            previous_frame = Box::new(previous_frame.join(r.ready));
+            previous_frame.cleanup_finished();
             let mut x: i32 = self.fft_tex_index;
             let ux: i32 = x as i32;
             cbb = cbb
