@@ -43,10 +43,12 @@ Usage:
   e-nguyen --version
 
 Options:
-  -h --help           Show this screen.
-  -v --version        Show version.
-  -c --config PATH    Custom configuration path.
-  -f --fullscreen     Start in fullscreen.
+  -h --help           Show this screen
+  -v --version        Show version
+  -c --config PATH    Custom configuration path
+  -f --fullscreen     Start in fullscreen
+  -l --layers         Enable Vulkan debug layers
+  -b --buffers        Enable robust buffer access
   --verbose           RUST_LOG=debug
 ";
 const VERSION_BANNER_TEMPLATE: &'static str = r"
@@ -64,6 +66,7 @@ Made available under the GNU LGPL-3.0 License
 struct Args {
     flag_config: String,
     flag_fullscreen: bool,
+    flag_layers: bool,
     flag_version: bool,
     flag_verbose: bool,
 }
@@ -104,7 +107,8 @@ fn main() {
         }
     };
 
-    let picker = match ewin::GpuPicker::new() {
+    let load_layers = args.flag_layers;
+    let picker = match ewin::GpuPicker::new(load_layers) {
         Ok(i) => i,
         Err(_) => {
             error!("Missing Vulkan loader, ICD, or Vulkan capable device");
