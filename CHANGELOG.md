@@ -3,6 +3,8 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## Master
+### Added
+- `-l` command line switch to activate Vulkan debug layers
 
 ## 0.1.2
 ### Changed
