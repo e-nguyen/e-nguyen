@@ -15,6 +15,7 @@
 
 use crate::application::MezLauncher;
 use crate::compute::{AudioTex, AudioTexSource, AudioTexTap};
+use crate::errors::VulkanoError;
 use crate::ewin::{GpuPicker, SwapWindow};
 use crate::input;
 use crate::input::{KeyTracker, MouseTracker, UserEvent};
@@ -37,7 +38,7 @@ use vulkano_win::VkSurfaceBuild;
 use winit;
 use winit::Icon;
 
-pub fn mezmerize(launcher: &MezLauncher) -> Result<(), Box<dyn Error>> {
+pub fn mezmerize(launcher: &MezLauncher) -> Result<(), VulkanoError> {
     // TODO pass picker in
     let picker = GpuPicker::new().unwrap();
 
@@ -138,31 +139,34 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
     fn new(
         swap_win: &mut SwapWindow,
         _r: &MezResources,
-    ) -> Result<(MezFramer, MezState), Box<dyn Error>> {
+    ) -> Result<(MezFramer, MezState), VulkanoError> {
         // creates a stream of image-futures we can use to copy to our fft_texture
         let source = AudioTexSource::new(1024).unwrap();
         let tap =
             AudioTexTap::turn_on(source, swap_win.device.clone(), swap_win.window_queue.clone())
                 .unwrap();
 
-        let vs = uv_image_vsm::Shader::load(swap_win.device.clone())?;
-        let fs = uv_scroll_fsm::Shader::load(swap_win.device.clone())?;
+        let vs = uv_image_vsm::Shader::load(swap_win.device.clone()).unwrap();
+        let fs = uv_scroll_fsm::Shader::load(swap_win.device.clone()).unwrap();
 
-        let render_pass = Arc::new(vulkano::single_pass_renderpass!(swap_win.device.clone(),
-                                         attachments: {
-                                             color: {
-                                                 load: Clear,
-                                                 store: Store,
-                                                 format: swap_win.swapchain.format(),
-                                                 samples: 1,
+        let render_pass = Arc::new(
+            vulkano::single_pass_renderpass!(swap_win.device.clone(),
+                                             attachments: {
+                                                 color: {
+                                                     load: Clear,
+                                                     store: Store,
+                                                     format: swap_win.swapchain.format(),
+                                                     samples: 1,
+                                                 }
+                                             },
+
+                                             pass: {
+                                                 color: [color],
+                                                 depth_stencil: {}
                                              }
-                                         },
-
-                                         pass: {
-                                             color: [color],
-                                             depth_stencil: {}
-                                         }
-        )?);
+            )
+            .unwrap(),
+        );
 
         let fft_texture = StorageImage::new(
             swap_win.device.clone(),
@@ -211,8 +215,9 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
                 .viewports_dynamic_scissors_irrelevant(1)
                 .fragment_shader(fs.main_entry_point(), ())
                 .blend_alpha_blending()
-                .render_pass(Subpass::from(render_pass.clone(), 0).ok_or("No subpass")?)
-                .build(swap_win.device.clone())?,
+                .render_pass(Subpass::from(render_pass.clone(), 0).ok_or("No subpass").unwrap())
+                .build(swap_win.device.clone())
+                .unwrap(),
         );
 
         let set = Arc::new(
@@ -245,7 +250,7 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
         swap_win: &mut SwapWindow,
         mut frame_state: MezState,
         _r: &MezResources,
-    ) -> Result<MezState, Box<dyn Error>> {
+    ) -> Result<MezState, VulkanoError> {
         let mut previous_frame =
             Box::new(vulkano::sync::now(swap_win.device.clone())) as Box<dyn GpuFuture>;
 
@@ -269,13 +274,14 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
             }
         };
 
-        let (image_num, acquire_future) = swap_win.future_image()?;
+        let (image_num, acquire_future) = swap_win.future_image().unwrap();
         let clear_values = vec![[0.0, 0.0, 0.0, 1.0].into()];
 
-        let mut cbb = AutoCommandBufferBuilder::primary_one_time_submit(
+        let mut cbb: AutoCommandBufferBuilder = AutoCommandBufferBuilder::primary_one_time_submit(
             swap_win.device.clone(),
             swap_win.window_queue.family(),
-        )?;
+        )
+        .unwrap();
 
         if let Some(r) = ready {
             let mut x: i32 = self.fft_tex_index;
@@ -310,16 +316,19 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
         }
 
         cbb = cbb
-            .begin_render_pass(self.framebuffers[image_num].clone(), false, clear_values)?
+            .begin_render_pass(self.framebuffers[image_num].clone(), false, clear_values)
+            .unwrap()
             .draw(
                 self.pipeline.clone(),
                 &swap_win.dynamic_state,
                 vec![self.background_rect.clone()],
                 self.set.clone(),
                 push_constants,
-            )?
-            .end_render_pass()?;
-        let cb = cbb.build()?;
+            )
+            .unwrap()
+            .end_render_pass()
+            .unwrap();
+        let cb = cbb.build().unwrap();
 
         let new_frame = acquire_future
             .join(previous_frame)
@@ -337,10 +346,10 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
                 Ok(frame_state)
             }
             // TODO research which of these are recoverable
-            Err(e @ FlushError::OutOfDate) => Err(Box::new(e)),
+            Err(e @ FlushError::OutOfDate) => Err((Box::new(e) as Box<Error>).into()),
             Err(e) => {
                 error!("{:?}", e);
-                Err(Box::new(e))
+                Err((Box::new(e) as Box<Error>).into())
             }
         }
     }

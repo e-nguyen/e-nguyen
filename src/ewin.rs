@@ -13,9 +13,9 @@
 
 // Copyright 2019 E-Nguyen Developers.
 
-use crate::errors::ENguyenError;
+use crate::errors::{ENguyenError, FrameError, VulkanoError};
 
-use log::{error, info, warn};
+use log::{info, warn};
 use std::error::Error;
 use std::sync::Arc;
 use vulkano::command_buffer::DynamicState;
@@ -49,7 +49,7 @@ impl<'a> SwapWindow {
     pub fn new(
         picker: &'a GpuPicker,
         surface: &Arc<Surface<Window>>,
-    ) -> Result<SwapWindow, Box<dyn Error>> {
+    ) -> Result<SwapWindow, VulkanoError> {
         let physical = picker.discrete_or_first_device(&surface)?;
         info!("Using device: {} (type: {:?})", physical.name(), physical.ty());
 
@@ -106,7 +106,7 @@ impl<'a> SwapWindow {
     pub fn size_dependent_setup(
         &mut self,
         render_pass: Arc<RenderPassAbstract + Send + Sync>,
-    ) -> Result<Vec<Arc<FramebufferAbstract + Send + Sync>>, Box<dyn Error>> {
+    ) -> Result<Vec<Arc<FramebufferAbstract + Send + Sync>>, FrameError> {
         let dimensions = self.swap_images[0].dimensions();
         let viewport = Viewport {
             origin: [0.0, 0.0],
@@ -134,16 +134,14 @@ impl<'a> SwapWindow {
     pub fn recreate_swapchain(
         &mut self,
         render_pass: Arc<RenderPassAbstract + Send + Sync>,
-    ) -> Result<Vec<Arc<FramebufferAbstract + Send + Sync>>, Box<dyn Error>> {
+    ) -> Result<Vec<Arc<FramebufferAbstract + Send + Sync>>, FrameError> {
         let dimensions = self.dimensions().ok_or("No window dimensions")?;
         let (new_swapchain, new_images) = match self.swapchain.recreate_with_dimension(dimensions) {
             Ok(r) => r,
             // This error tends to happen when the user is manually resizing the window.
             // Simply restarting the loop is the easiest way to fix this issue.
-            Err(SwapchainCreationError::UnsupportedDimensions) => {
-                return Err(Box::new(ENguyenError::from(
-                    "SwapchainCreationError: Unsupported dimensions",
-                )));
+            Err(sce @ SwapchainCreationError::UnsupportedDimensions) => {
+                return Err(FrameError::SwapchainCreation { sce });
             }
             Err(err) => panic!("{:?}", err),
         };
@@ -154,11 +152,11 @@ impl<'a> SwapWindow {
         return Ok(frames);
     }
 
-    pub fn future_image(&self) -> Result<(usize, Box<GpuFuture>), Box<dyn Error>> {
+    pub fn future_image(&self) -> Result<(usize, Box<GpuFuture>), FrameError> {
         match swapchain::acquire_next_image(self.swapchain.clone(), None) {
             Ok((image_index, future)) => Ok((image_index, Box::new(future))),
-            Err(out_of_date @ AcquireError::OutOfDate) => {
-                return Err(Box::new(out_of_date));
+            Err(ae @ AcquireError::OutOfDate) | Err(ae @ AcquireError::SurfaceLost) => {
+                return Err(FrameError::ImageAcquisition { ae });
             }
             Err(err) => panic!("{:?}", err),
         }
@@ -200,23 +198,20 @@ pub struct GpuPicker {
 }
 
 impl GpuPicker {
-    pub fn new() -> Result<GpuPicker, Box<dyn Error>> {
+    pub fn new() -> Result<GpuPicker, VulkanoError> {
         let app_info = vulkano::app_info_from_cargo_toml!();
         let extensions = vulkano_win::required_extensions();
         let instance = Instance::new(Some(&app_info), &extensions, None);
         return match instance {
             Ok(instance) => Ok(GpuPicker { instance }),
-            Err(no_vulkan) => {
-                error!("No vulkan implementation installed. {:?}", no_vulkan);
-                Err(Box::new(no_vulkan))
-            }
+            Err(no_vulkan) => Err(VulkanoError::NoVulkanInstalled { ice: no_vulkan }),
         };
     }
 
     pub fn discrete_or_first_device(
         &self,
         surface: &Arc<Surface<Window>>,
-    ) -> Result<PhysicalDevice, Box<dyn Error>> {
+    ) -> Result<PhysicalDevice, VulkanoError> {
         let all_devs = PhysicalDevice::enumerate(&self.instance);
         let mut can_draw =
             all_devs.filter(|&pd| GpuPicker::graphics_queue_fam(&pd, &surface).is_some());
@@ -230,9 +225,7 @@ impl GpuPicker {
             match first_dev {
                 Some(dev) => Ok(dev),
                 None => {
-                    return Err(Box::new(ENguyenError::from(
-                        "No physical devices could draw to the window",
-                    )));
+                    return Err(VulkanoError::CantDraw {});
                 }
             }
         }
