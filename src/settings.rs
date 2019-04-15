@@ -14,6 +14,7 @@
 // Copyright 2019 E-Nguyen Developers.
 
 use crate::application::SettingsLauncher;
+use crate::errors::{FrameError, VulkanoError};
 use crate::ewin::{GpuPicker, SwapWindow};
 use crate::input;
 use crate::input::{KeyTracker, MouseTracker, UserEvent};
@@ -50,7 +51,7 @@ pub static WIDTH: u32 = 370;
 pub static LOGO_WIDTH: u32 = 201;
 pub static LOGO_HEIGHT: u32 = 121;
 
-pub fn settings_ui(launcher: &SettingsLauncher) -> Result<(), Box<dyn Error>> {
+pub fn settings_ui(launcher: &SettingsLauncher) -> Result<(), VulkanoError> {
     // TODO pass picker in
     let picker = GpuPicker::new().unwrap();
 
@@ -134,10 +135,11 @@ pub struct SettingsResources<'s> {
 }
 
 impl<'s> SettingsResources<'s> {
-    fn new() -> Result<SettingsResources<'s>, Box<dyn Error>> {
-        Ok(SettingsResources {
-            font: Font::from_bytes(include_bytes!("../font/MajorMonoDisplay-Regular.ttf") as &[u8])?,
-        })
+    fn new() -> Result<SettingsResources<'s>, VulkanoError> {
+        match Font::from_bytes(include_bytes!("../font/MajorMonoDisplay-Regular.ttf") as &[u8]) {
+            Ok(font) => Ok(SettingsResources { font }),
+            Err(err) => Err(VulkanoError::from("Font loading failed")),
+        }
     }
 }
 
@@ -159,7 +161,7 @@ impl<'f, 'r: 'f> Framer<'f, 'r, SettingsFramer<'f>, SettingsState, SettingsResou
     fn new(
         swap_win: &mut SwapWindow,
         resources: &'f SettingsResources<'r>,
-    ) -> Result<(SettingsFramer<'f>, SettingsState), Box<dyn Error>> {
+    ) -> Result<(SettingsFramer<'f>, SettingsState), VulkanoError> {
         let background_rect = {
             CpuAccessibleBuffer::from_iter(
                 swap_win.device.clone(),
@@ -346,7 +348,7 @@ impl<'f, 'r: 'f> Framer<'f, 'r, SettingsFramer<'f>, SettingsState, SettingsResou
         swap_win: &mut SwapWindow,
         mut frame_state: SettingsState,
         resources: &SettingsResources,
-    ) -> Result<SettingsState, Box<dyn Error>> {
+    ) -> Result<SettingsState, VulkanoError> {
         // TODO memory swaps = lifetime impedence
         let mut previous_frame = Box::new(sync::now(swap_win.device.clone())) as Box<GpuFuture>;
         std::mem::swap(&mut previous_frame, &mut frame_state.previous_frame);
@@ -420,11 +422,8 @@ impl<'f, 'r: 'f> Framer<'f, 'r, SettingsFramer<'f>, SettingsState, SettingsResou
                 Ok(frame_state)
             }
             // TODO research which of these are recoverable
-            Err(e @ FlushError::OutOfDate) => Err(Box::new(e)),
-            Err(e) => {
-                error!("{:?}", e);
-                Err(Box::new(e))
-            }
+            Err(e @ FlushError::OutOfDate) => Err((Box::new(e) as Box<Error>).into()),
+            Err(e) => Err((Box::new(e) as Box<Error>).into()),
         }
     }
 }

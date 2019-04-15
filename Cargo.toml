@@ -14,6 +14,9 @@ maintenance = { status = "actively-developed" }
 [dependencies]
 image = "0.21.0"
 
+# stdlib upgrades
+failure = "0.1.5" # civilized errors
+
 # command line options
 docopt = "1.0.2"
 

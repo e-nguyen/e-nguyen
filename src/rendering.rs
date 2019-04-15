@@ -13,9 +13,8 @@
 
 // Copyright 2019 E-Nguyen Developers.
 
+use crate::errors::{FrameError, VulkanoError};
 use crate::ewin::SwapWindow;
-
-use std::error::Error;
 
 pub mod placeholder_vsm {
     vulkano_shaders::shader! {
@@ -168,9 +167,9 @@ pub struct XyVertex {
 vulkano::impl_vertex!(XyVertex, position);
 
 pub trait Frame {
-    fn size_dependent_setup(&mut self) -> Result<(), Box<dyn Error>>;
-    fn recreate_swapchain(&mut self, context: &SwapWindow) -> Result<(), Box<dyn Error>>;
-    fn render_one(&mut self, context: &SwapWindow, recreate: &bool) -> Result<(), Box<dyn Error>>;
+    fn size_dependent_setup(&mut self) -> Result<(), VulkanoError>;
+    fn recreate_swapchain(&mut self, context: &SwapWindow) -> Result<(), VulkanoError>;
+    fn render_one(&mut self, context: &SwapWindow, recreate: &bool) -> Result<(), VulkanoError>;
 }
 
 /// Less dynamic data such as the products of pipeline setup and command buffer pool
@@ -181,8 +180,8 @@ pub trait Framer<'f, 'r: 'f, F, S, R> {
         swap_win: &mut SwapWindow,
         state: S,
         resources: &R,
-    ) -> Result<S, Box<dyn Error>>;
-    fn new(swap_win: &mut SwapWindow, resources: &'r R) -> Result<(F, S), Box<dyn Error>>
+    ) -> Result<S, VulkanoError>;
+    fn new(swap_win: &mut SwapWindow, resources: &'r R) -> Result<(F, S), VulkanoError>
     where
         F: Framer<'f, 'r, F, S, R>,
         S: FrameState,
