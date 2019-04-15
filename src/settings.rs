@@ -52,8 +52,7 @@ pub static LOGO_WIDTH: u32 = 201;
 pub static LOGO_HEIGHT: u32 = 121;
 
 pub fn settings_ui(launcher: &SettingsLauncher) -> Result<(), VulkanoError> {
-    // TODO pass picker in
-    let picker = GpuPicker::new().unwrap();
+    let picker = launcher.picker.clone();
 
     let icon_data = include_bytes!("../logo/icon.png");
 

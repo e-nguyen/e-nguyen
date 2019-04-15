@@ -197,11 +197,23 @@ pub struct GpuPicker {
     pub instance: Arc<vulkano::instance::Instance>,
 }
 
+static STANDARD_VALIDATION: &str = "VK_LAYER_LUNARG_standard_validation";
+
 impl GpuPicker {
-    pub fn new() -> Result<GpuPicker, VulkanoError> {
+    pub fn new(load_layers: bool) -> Result<GpuPicker, VulkanoError> {
         let app_info = vulkano::app_info_from_cargo_toml!();
         let extensions = vulkano_win::required_extensions();
-        let instance = Instance::new(Some(&app_info), &extensions, None);
+        let instance = if load_layers {
+            let found_standard =
+                vulkano::instance::layers_list().unwrap().find(|l| l.name() == STANDARD_VALIDATION);
+            let layers = match found_standard {
+                Some(_layer) => vec![STANDARD_VALIDATION],
+                None => vec![],
+            };
+            Instance::new(Some(&app_info), &extensions, layers)
+        } else {
+            Instance::new(Some(&app_info), &extensions, None)
+        };
         return match instance {
             Ok(instance) => Ok(GpuPicker { instance }),
             Err(no_vulkan) => Err(VulkanoError::NoVulkanInstalled { ice: no_vulkan }),
@@ -290,19 +302,24 @@ mod tests {
 
     #[test]
     fn vulkan_installed() {
-        GpuPicker::new().unwrap();
+        GpuPicker::new(false).unwrap();
+    }
+
+    #[test]
+    fn vulkan_layers_load() {
+        GpuPicker::new(true).unwrap();
     }
 
     #[test]
     fn find_device_for_surface() {
-        let picker = GpuPicker::new().unwrap();
+        let picker = GpuPicker::new(false).unwrap();
         let surface = test_surface(&picker.instance);
         SwapWindow::new(&picker, &surface).unwrap();
     }
 
     #[test]
     fn get_dimensions() {
-        let picker = GpuPicker::new().unwrap();
+        let picker = GpuPicker::new(false).unwrap();
         let surface = test_surface(&picker.instance);
         let gpu_win = SwapWindow::new(&picker, &surface).unwrap();
         gpu_win.dimensions();
@@ -318,7 +335,7 @@ mod tests {
 
     #[test]
     fn compute_device_and_queue() {
-        let picker = GpuPicker::new().unwrap();
+        let picker = GpuPicker::new(false).unwrap();
         let pd = picker.compute_device().unwrap();
         let _queue_family = GpuPicker::compute_queue_fam(&pd).unwrap();
     }

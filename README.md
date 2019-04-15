@@ -34,6 +34,8 @@ cargo run --release --fullscreen
 
 For graphics issues, first try building and running examples from the [Vulkano](https://github.com/vulkano-rs/vulkano) project.  The teapot and other examples should run.
 
+Use the `-l` switch to activate the standard Vulkan validation layers, which may reveal invalid API calls.
+
 The Wiki contains some information about configuring and tuning your sound server for E-Nguyen to play well.
 
 ## Contributing

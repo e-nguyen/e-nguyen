@@ -144,7 +144,7 @@ mod tests {
     fn test_ready() {
         use crate::ewin::GpuPicker;
         let en_conf = ENguyenConfig::default();
-        let picker = GpuPicker::new();
+        let picker = GpuPicker::new(false);
         assert!(en_conf.ready(&picker.unwrap()));
     }
 }
