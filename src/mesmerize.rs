@@ -39,8 +39,7 @@ use winit;
 use winit::Icon;
 
 pub fn mezmerize(launcher: &MezLauncher) -> Result<(), VulkanoError> {
-    // TODO pass picker in
-    let picker = GpuPicker::new(false).unwrap();
+    let picker = launcher.picker.clone();
 
     let icon_data = include_bytes!("../logo/icon.png");
 

@@ -39,6 +39,7 @@ pub enum LaunchRequest {
 
 pub struct MezLauncher {
     sender: SyncSender<Message>,
+    pub picker: GpuPicker,
 }
 
 impl MezLauncher {
@@ -58,6 +59,7 @@ impl MezLauncher {
 
 pub struct SettingsLauncher {
     sender: SyncSender<Message>,
+    pub picker: GpuPicker,
 }
 
 impl SettingsLauncher {
@@ -96,43 +98,43 @@ impl App {
         }
     }
 
-    fn launch_settings(&mut self, tx: &SyncSender<Message>) {
+    fn launch_settings(&mut self, tx: &SyncSender<Message>, picker: GpuPicker) {
         if !self.settings_alive() {
-            let settings = SettingsLauncher { sender: tx.clone() };
+            let settings = SettingsLauncher { sender: tx.clone(), picker };
             self.settings_handle = Some(thread::spawn(move || {
                 settings.launch();
             }));
         }
     }
 
-    fn launch_mez(&mut self, tx: &SyncSender<Message>) {
+    fn launch_mez(&mut self, tx: &SyncSender<Message>, picker: GpuPicker) {
         if !self.mez_alive() {
-            let mez = MezLauncher { sender: tx.clone() };
+            let mez = MezLauncher { sender: tx.clone(), picker };
             self.mez_handle = Some(thread::spawn(move || {
                 mez.launch();
             }));
         }
     }
 
-    pub fn launch(request: LaunchRequest, _config: ENguyenConfig, _picker: GpuPicker) {
+    pub fn launch(request: LaunchRequest, _config: ENguyenConfig, picker: GpuPicker) {
         let (tx, rx) = mpsc::sync_channel(5);
         let mut app = App::new();
         match request {
             LaunchRequest::Settings => {
-                app.launch_settings(&tx);
+                app.launch_settings(&tx, picker.clone());
             }
             LaunchRequest::Mez => {
-                app.launch_mez(&tx);
+                app.launch_mez(&tx, picker.clone());
             }
         }
 
         for recieved in rx.iter() {
             match recieved {
                 Message::LaunchMez => {
-                    app.launch_mez(&tx);
+                    app.launch_mez(&tx, picker.clone());
                 }
                 Message::LaunchSettings => {
-                    app.launch_settings(&tx);
+                    app.launch_settings(&tx, picker.clone());
                 }
                 Message::ClosedSettings => {
                     if let Some(handle) = app.settings_handle {
