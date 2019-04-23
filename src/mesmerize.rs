@@ -32,6 +32,7 @@ use vulkano::framebuffer::{FramebufferAbstract, RenderPassAbstract, Subpass};
 use vulkano::image::{Dimensions, StorageImage};
 use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
 use vulkano::sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode};
+use vulkano::sync;
 use vulkano::sync::FlushError;
 use vulkano::sync::GpuFuture;
 use vulkano_win::VkSurfaceBuild;
@@ -255,7 +256,6 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
 
         // TODO memory swaps = lifetime impedence
         std::mem::swap(&mut previous_frame, &mut frame_state.previous_frame);
-        previous_frame.cleanup_finished();
 
         if frame_state.recreate_swapchain {
             self.framebuffers = swap_win.recreate_swapchain(self.render_pass.clone())?;
@@ -276,15 +276,13 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
         let (image_num, acquire_future) = swap_win.future_image().unwrap();
         let clear_values = vec![[0.0, 0.0, 0.0, 1.0].into()];
 
-        let mut cbb: AutoCommandBufferBuilder = AutoCommandBufferBuilder::primary_one_time_submit(
+        let mut cbb: AutoCommandBufferBuilder = AutoCommandBufferBuilder::primary(
             swap_win.device.clone(),
             swap_win.window_queue.family(),
         )
         .unwrap();
 
-        if let Some(r) = ready {
-            previous_frame = Box::new(previous_frame.join(r.ready));
-            previous_frame.cleanup_finished();
+        let compute_cb = if let Some(r) = ready {
             let mut x: i32 = self.fft_tex_index;
             let ux: i32 = x as i32;
             cbb = cbb
@@ -307,7 +305,10 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
             }
             self.fft_tex_index = x;
             self.audio_tex = None;
-        }
+            Some(r.ready)
+        } else {
+            None
+        };
 
         let push_constants =
             uv_scroll_fsm::ty::PushConstant { offset_fac: self.fft_tex_index as f32 / 1024_f32 };
@@ -331,9 +332,27 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
             .unwrap();
         let cb = cbb.build().unwrap();
 
-        let new_frame = acquire_future
-            .join(previous_frame)
-            .then_execute(swap_win.window_queue.clone(), cb)?
+        let mut new_frame: Box<dyn GpuFuture> = Box::new(previous_frame.join(acquire_future));
+        new_frame.cleanup_finished();
+
+        if let Some(compute_cb) = compute_cb {
+            dbg!("Tex was ready!");
+            new_frame = Box::new(
+                new_frame
+                    .then_execute(swap_win.window_queue.clone(), cb)
+                    .unwrap()
+                    .then_signal_semaphore_and_flush()
+                    .unwrap()
+                    .then_execute(swap_win.window_queue.clone(), compute_cb)
+                    .unwrap()
+                    .then_signal_semaphore_and_flush()
+                    .unwrap(),
+            );
+        } else {
+            new_frame = Box::new(new_frame.then_execute(swap_win.window_queue.clone(), cb).unwrap())
+        }
+
+        let frame_res = new_frame
             .then_swapchain_present(
                 swap_win.window_queue.clone(),
                 swap_win.swapchain.clone(),
@@ -341,7 +360,7 @@ impl<'a, 'f: 'a> Framer<'a, 'f, MezFramer, MezState, MezResources> for MezFramer
             )
             .then_signal_fence_and_flush();
 
-        match new_frame {
+        match frame_res {
             Ok(frame) => {
                 frame_state.previous_frame = Box::new(frame);
                 Ok(frame_state)

@@ -31,7 +31,7 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::time;
 use vulkano::buffer::{BufferUsage, CpuBufferPool};
-use vulkano::command_buffer::AutoCommandBufferBuilder;
+use vulkano::command_buffer::{AutoCommandBuffer, AutoCommandBufferBuilder, CommandBuffer};
 use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
 use vulkano::device::{Device, Queue};
 use vulkano::format::Format;
@@ -46,7 +46,7 @@ use vulkano::sync::GpuFuture;
 /// Consume these by memory barrier synchronization and copy (or use directly)
 pub struct AudioTex {
     pub buffer: Arc<StorageImage<Format>>,
-    pub ready: Box<dyn GpuFuture + Send + Sync>,
+    pub ready: Box<AutoCommandBuffer>,
 }
 
 pub struct AudioTexSource {
@@ -187,11 +187,8 @@ impl AudioTexTap {
                     max_freq: draw_log_scale.max_freq as f32,
                 };
 
-                let cb = AutoCommandBufferBuilder::secondary_compute_simultaneous_use(
-                    device.clone(),
-                    compute_queue.family(),
-                )
-                .unwrap();
+                let cb = AutoCommandBufferBuilder::primary(device.clone(), compute_queue.family())
+                    .unwrap();
 
                 assert_eq!(source.tex_height as u32 % channel_combine::LOCAL_SIZE_X, 0);
                 let dispatch_x = source.tex_height as u32 / channel_combine::LOCAL_SIZE_X;
@@ -200,13 +197,7 @@ impl AudioTexTap {
                     .unwrap()
                     .build()
                     .unwrap();
-                let future = sync::now(device.clone())
-                    .then_execute(compute_queue.clone(), cb)
-                    .unwrap()
-                    .then_signal_fence_and_flush()
-                    .unwrap();
-                future.wait(None).unwrap();
-                let result = AudioTex { ready: Box::new(future), buffer: out_buf.clone() };
+                let result = AudioTex { ready: Box::new(cb), buffer: out_buf.clone() };
                 tx.send(result).unwrap();
             }
         });
