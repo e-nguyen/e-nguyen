@@ -72,6 +72,7 @@ use log::{debug, error, info, warn};
 use pulse::callbacks::ListResult;
 use pulse::context::introspect::SourceInfo;
 use pulse::context::Context;
+use pulse::def::BufferAttr;
 use pulse::error::PAErr;
 #[allow(unused_imports)]
 use pulse::mainloop::api::Mainloop as MainloopTrait;
@@ -339,7 +340,7 @@ impl AudioStream for PaStream {
             Err(Box::new(ENguyenError::from("Can't heat a ring that isn't connected")))
         } else {
             let weak_killed: Weak<AtomicBool> = Arc::downgrade(&self.killed);
-            let min_count: usize = 128; // at least 512B at a time
+            let min_count: usize = 128; // at least 128B at a time
             let (tx, rx) = RingBytes::new(32768);
 
             let monitor = self.source.clone();
@@ -610,6 +611,13 @@ fn connect_stream(
     stream: &mut Arc<Mutex<Stream>>,
     stream_def: &ServerStream,
 ) -> Result<bool, String> {
+    let ba = BufferAttr {
+        maxlength: std::u32::MAX, // adjusts overall latency
+        tlength: 2048,            // adjusts overall latency
+        prebuf: std::u32::MAX,    // playback only
+        minreq: std::u32::MAX,    // playback only
+        fragsize: std::u32::MAX,  // adjusts overall latency
+    };
     ac.mainloop.borrow_mut().lock();
     {
         stream
@@ -617,8 +625,8 @@ fn connect_stream(
             .unwrap()
             .connect_record(
                 Some(stream_def.name.as_str()),
-                None,
-                flags::START_UNMUTED & flags::START_CORKED,
+                Some(&ba),
+                flags::START_UNMUTED & flags::START_CORKED & flags::ADJUST_LATENCY,
             )
             .expect("Could not connect");
     }
@@ -696,7 +704,7 @@ mod tests {
 
     #[test]
     fn heat_and_chill_square_test_ring() {
-        let min_count = 1024;
+        let min_count = 512;
         let mut stream = Square4kHz::default();
         let _connected = stream.connect().unwrap();
         let (rx, source) = stream.heat().unwrap();
@@ -718,7 +726,7 @@ mod tests {
 
     #[test]
     fn heat_and_chill_pa_ring() {
-        let min_count = 1024;
+        let min_count = 512;
         let mut stream = PaStream::default();
 
         let _connected = stream.connect().unwrap();
