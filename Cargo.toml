@@ -12,7 +12,7 @@ edition = "2018"
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-image = "0.21.0"
+image = "0.23.4"
 
 # stdlib upgrades
 failure = "0.1.5" # civilized errors
