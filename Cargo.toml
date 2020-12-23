@@ -40,7 +40,7 @@ vulkano-shaders = "0.11.1"
 libpulse-binding = "2.5.0" # Pulse Audio Linux sound server client
 rustfft = "3.0.0" # spectrum analysis
 byteorder = "1.3.1" # reading / writing bytes <-> audio
-bytes = "0.4.12" # reliable reusable buffers
+bytes = "1.0.0" # reliable reusable buffers
 
 # Window library
 [dependencies.winit]
