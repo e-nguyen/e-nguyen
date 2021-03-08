@@ -34,7 +34,7 @@ rusttype = "0.7.5" # config text
 # GPU drawing
 vulkano = "0.11.1"
 vulkano-win = "0.11.1"
-vulkano-shaders = "0.11.1"
+vulkano-shaders = "0.21.0"
 
 # Sound input
 libpulse-binding = "2.5.0" # Pulse Audio Linux sound server client
